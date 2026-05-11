@@ -1,6 +1,10 @@
 # Claude
 .claude/
 
+# Variáveis de ambiente
+.env
+.env.local
+
 # Banco de dados
 *.db
 *.sqlite
