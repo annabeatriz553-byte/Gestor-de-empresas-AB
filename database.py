@@ -162,12 +162,21 @@ def importar_empresas_bulk(registros, status_padrao="ativa"):
     imp = dup = err = 0
     novos_ids = []
 
-    insert_query = _adapt_query('''
-        INSERT INTO empresas
-        (nome, responsavel, email, telefone, cnpj, endereco,
-         status, observacoes, codigo, regime_tributario)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
-    ''')
+    if USE_POSTGRES:
+        insert_query = '''
+            INSERT INTO empresas
+            (nome, responsavel, email, telefone, cnpj, endereco,
+             status, observacoes, codigo, regime_tributario)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING id
+        '''
+    else:
+        insert_query = '''
+            INSERT INTO empresas
+            (nome, responsavel, email, telefone, cnpj, endereco,
+             status, observacoes, codigo, regime_tributario)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+        '''
 
     for reg in registros:
         try:
@@ -187,13 +196,12 @@ def importar_empresas_bulk(registros, status_padrao="ativa"):
                 str(reg.get("regime",       "") or "").strip(),
             ))
             if USE_POSTGRES:
-                # PostgreSQL retorna com RETURNING
                 novos_ids.append(c.fetchone()[0])
             else:
                 novos_ids.append(c.lastrowid)
             imp += 1
         except Exception as e:
-            if "unique" in str(e).lower():
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
                 dup += 1
             else:
                 err += 1
