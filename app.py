@@ -46,6 +46,45 @@ if "db_initialized" not in st.session_state:
     init_database()
     st.session_state.db_initialized = True
 
+# ── Queries com cache — evita round-trips repetidos ao Supabase ──
+# O Streamlit re-executa o script inteiro a cada interação do usuário.
+# Com cache (TTL 20s), as leituras pesadas são servidas da memória.
+@st.cache_data(ttl=20, show_spinner=False)
+def _q_empresas_prog(mes, ano):
+    return obter_empresas_com_progresso(mes, ano)
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _q_busca_prog(termo, mes, ano):
+    return buscar_empresas_com_progresso(termo, mes, ano)
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _q_pendentes(mes, ano):
+    return obter_etapas_pendentes_bulk(mes, ano)
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _q_stats(mes, ano):
+    return obter_estatisticas_mes(mes, ano)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _q_todas_empresas():
+    return obter_todas_empresas()
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _q_nomes_etapas():
+    return obter_nomes_etapas_distintos()
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _q_etapas_bulk(mes, ano):
+    return obter_todas_etapas_status_bulk(mes, ano)
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _q_prog_anual(empresa_id, ano):
+    return obter_progresso_anual_bulk(empresa_id, ano)
+
+def _limpar_cache():
+    """Invalida todo o cache após qualquer mutação no banco."""
+    st.cache_data.clear()
+
 # ── Dynamic CSS ───────────────────────────────────────────────
 _FONTES   = {"pequeno":"13px","medio":"15px","grande":"18px"}
 _fonte_px = _FONTES.get(cfg["fonte"], "15px")
@@ -298,8 +337,8 @@ def pct_emp(emp):
 # ══════════════════════════════════════════════════════════════
 @st.dialog("⚡ Ações em Lote", width="large")
 def dialog_marcar_lote():
-    todas_emps   = obter_todas_empresas()
-    nomes_etapas = obter_nomes_etapas_distintos()
+    todas_emps   = _q_todas_empresas()
+    nomes_etapas = _q_nomes_etapas()
 
     opcoes_emps = {
         e[0]: f"{safe(e[10]) + ' · ' if e[10] else ''}{e[1]}"
@@ -370,6 +409,7 @@ def dialog_marcar_lote():
                          use_container_width=True, disabled=(n_m == 0),
                          key="btn_marcar"):
                 marcadas = marcar_etapa_bulk(ids_m, etapa_m, mes_str, ano_ref, concluido)
+                _limpar_cache()
                 st.success(
                     f"✅ **\"{etapa_m}\"** marcada como {acao} "
                     f"em **{marcadas}** empresa(s)!"
@@ -420,6 +460,7 @@ def dialog_marcar_lote():
                      disabled=(not nome_final or n_a == 0),
                      key="btn_adicionar_etapa"):
             adicionadas, ja_existiam = adicionar_etapa_bulk(ids_a, nome_final)
+            _limpar_cache()
             msg = f"✅ Etapa **\"{nome_final}\"** adicionada em **{adicionadas}** empresa(s)."
             if ja_existiam:
                 msg += f" ({ja_existiam} já possuíam essa etapa e foram ignoradas.)"
@@ -474,6 +515,7 @@ def dialog_marcar_lote():
                                 remover_etapa(et[0])
                                 removidas += 1
                                 break
+                    _limpar_cache()
                     st.success(
                         f"✅ Etapa **\"{etapa_r}\"** removida de **{removidas}** empresa(s)!"
                     )
@@ -526,6 +568,7 @@ def dialog_empresa(empresa_id):
                                label_visibility="collapsed")
             if novo != feito:
                 marcar_etapa(eid, mes_str, ano_ref, novo)
+                _limpar_cache()
                 st.rerun()
         with col2:
             label = f"~~{enome}~~" if feito else enome
@@ -549,6 +592,7 @@ def dialog_empresa(empresa_id):
         if st.button("➕ Adicionar", key=f"btn_add_{empresa_id}", use_container_width=True):
             if nova_etapa.strip():
                 adicionar_etapa(empresa_id, nova_etapa.strip())
+                _limpar_cache()
                 st.rerun()
             else:
                 st.warning("Digite o nome da etapa.")
@@ -568,6 +612,7 @@ def dialog_empresa(empresa_id):
                 for e in etapas_atual:
                     if e[2] == remover:
                         remover_etapa(e[0])
+                        _limpar_cache()
                         st.rerun()
 
     st.divider()
@@ -579,6 +624,7 @@ def dialog_empresa(empresa_id):
                               key=f"info_{empresa_id}")
     if st.button("💾 Salvar Informações", key=f"save_info_{empresa_id}", use_container_width=True):
         salvar_informacoes(empresa_id, info_texto)
+        _limpar_cache()
         st.success("Informações salvas!")
 
     st.divider()
@@ -605,9 +651,9 @@ if menu == "📋 Empresas":
         filtro = st.selectbox("Filtrar", ["Todas", "Completas", "Em Progresso", "Não Iniciadas"])
 
     if search:
-        empresas_prog = buscar_empresas_com_progresso(search, mes_str, ano_ref)
+        empresas_prog = _q_busca_prog(search, mes_str, ano_ref)
     else:
-        empresas_prog = obter_empresas_com_progresso(mes_str, ano_ref)
+        empresas_prog = _q_empresas_prog(mes_str, ano_ref)
 
     if filtro != "Todas":
         if filtro == "Completas":
@@ -617,8 +663,8 @@ if menu == "📋 Empresas":
         elif filtro == "Não Iniciadas":
             empresas_prog = [e for e in empresas_prog if pct_emp(e) == 0]
 
-    faltando_map = obter_etapas_pendentes_bulk(mes_str, ano_ref)
-    t_stats = obter_estatisticas_mes(mes_str, ano_ref)
+    faltando_map = _q_pendentes(mes_str, ano_ref)
+    t_stats = _q_stats(mes_str, ano_ref)
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Total de Empresas", t_stats[0])
@@ -698,6 +744,7 @@ if menu == "📋 Empresas":
                     if st.session_state.get(key_c):
                         if st.button("✅", key=f"del_ok_{emp[0]}", help="Confirmar"):
                             deletar_empresa(emp[0])
+                            _limpar_cache()
                             st.session_state.pop(key_c, None)
                             st.rerun()
                     else:
@@ -781,6 +828,7 @@ if menu == "📋 Empresas":
                         cnpj, endereco, status, observacoes, codigo, regime
                     )
                     if ok:
+                        _limpar_cache()
                         del st.session_state.edit_empresa_id; st.rerun()
                     else:
                         st.error(msg)
@@ -815,7 +863,9 @@ elif menu == "➕ Cadastrar Empresa":
                 ok, msg = adicionar_empresa(nome.strip(), responsavel, email, telefone,
                                             cnpj, "", status, observacoes, codigo, regime)
                 st.success(msg) if ok else st.error(msg)
-                if ok: st.rerun()
+                if ok:
+                    _limpar_cache()
+                    st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════
@@ -926,7 +976,9 @@ elif menu == "📥 Importar Planilha":
                     with st.spinner("Importando... aguarde."):
                         imp, dup, err = importar_empresas_bulk(registros, status_p)
 
-                    if imp: st.success(f"✅ {imp} empresa(s) importada(s) com sucesso!")
+                    if imp:
+                        _limpar_cache()
+                        st.success(f"✅ {imp} empresa(s) importada(s) com sucesso!")
                     if dup: st.warning(f"⚠️ {dup} ignorada(s) — já existiam no cadastro.")
                     if err: st.error(f"❌ {err} erro(s).")
                     if imp: st.rerun()
@@ -964,9 +1016,9 @@ elif menu == "📈 Relatórios":
     with tab1:
         st.markdown(f"#### Resumo — {mes_nome}/{ano_ref}")
 
-        # batch queries
-        empresas_prog = obter_empresas_com_progresso(mes_str, ano_ref)
-        t_stats       = obter_estatisticas_mes(mes_str, ano_ref)
+        # batch queries (servidas do cache)
+        empresas_prog = _q_empresas_prog(mes_str, ano_ref)
+        t_stats       = _q_stats(mes_str, ano_ref)
         total_emp_r, completas_r, em_prog_r, nao_ini_r = t_stats
 
         if total_emp_r == 0:
@@ -1037,8 +1089,8 @@ elif menu == "📈 Relatórios":
             st.markdown("---")
             st.markdown("#### Todas as Empresas")
 
-            # tabela estilizada
-            etapas_bulk = obter_todas_etapas_status_bulk(mes_str, ano_ref)
+            # tabela estilizada (cache)
+            etapas_bulk = _q_etapas_bulk(mes_str, ano_ref)
 
             rows_html = ""
             for emp in empresas_prog:
@@ -1088,7 +1140,7 @@ elif menu == "📈 Relatórios":
     # ── TAB 2: Histórico por Empresa ──────────────────────────
     with tab2:
         st.markdown("#### Histórico por Empresa")
-        empresas_lista = obter_todas_empresas()
+        empresas_lista = _q_todas_empresas()
         if not empresas_lista:
             st.info("Nenhuma empresa cadastrada.")
         else:
@@ -1106,8 +1158,8 @@ elif menu == "📈 Relatórios":
 
                 st.markdown("---")
 
-                # progresso anual em batch (1 query)
-                prog_anual = obter_progresso_anual_bulk(emp_sel[0], ano_ref)
+                # progresso anual em batch (cache 60s)
+                prog_anual = _q_prog_anual(emp_sel[0], ano_ref)
 
                 meses_nomes = [_MESES[m] for m in range(1, 13)]
                 pcts_anuais = [prog_anual.get(f"{m:02d}", (0, 0, 0))[0] for m in range(1, 13)]
@@ -1290,8 +1342,8 @@ elif menu == "📈 Relatórios":
     with tab3:
         st.markdown(f"#### Exportar Dados — {mes_nome}/{ano_ref}")
 
-        empresas_prog_exp = obter_empresas_com_progresso(mes_str, ano_ref)
-        etapas_bulk_exp   = obter_todas_etapas_status_bulk(mes_str, ano_ref)
+        empresas_prog_exp = _q_empresas_prog(mes_str, ano_ref)
+        etapas_bulk_exp   = _q_etapas_bulk(mes_str, ano_ref)
 
         # monta dataframe de relatório
         rows_exp = []
@@ -1357,7 +1409,7 @@ elif menu == "📈 Relatórios":
             elif df_exp.empty:
                 st.info("Sem dados para exportar.")
             else:
-                t_s = obter_estatisticas_mes(mes_str, ano_ref)
+                t_s = _q_stats(mes_str, ano_ref)
 
                 def gerar_pdf():
                     def ps(text, n=40):
@@ -1450,7 +1502,7 @@ elif menu == "📈 Relatórios":
         )
 
         if busca_rel.strip():
-            resultados = buscar_empresas_com_progresso(busca_rel.strip(), mes_str, ano_ref)
+            resultados = _q_busca_prog(busca_rel.strip(), mes_str, ano_ref)
 
             if not resultados:
                 st.info("Nenhuma empresa encontrada para esse termo.")

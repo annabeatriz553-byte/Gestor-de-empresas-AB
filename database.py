@@ -11,19 +11,50 @@ ETAPAS_PADRAO = ["Notas de Entrada", "Notas de Saída", "Notas de Serviço", "Co
 DATABASE_URL = os.environ.get("DATABASE_URL")
 USE_POSTGRES = DATABASE_URL is not None
 
+# ── Pool de conexões PostgreSQL ───────────────────────────────
+# Reutiliza conexões abertas em vez de criar uma nova por chamada.
+# ThreadedConnectionPool é thread-safe (Streamlit usa threads por sessão).
+_pg_pool = None
+
+def _get_pool():
+    """Inicializa (uma vez) e retorna o pool de conexões PostgreSQL."""
+    global _pg_pool
+    if _pg_pool is None and USE_POSTGRES:
+        try:
+            from psycopg2.pool import ThreadedConnectionPool
+            _pg_pool = ThreadedConnectionPool(1, 8, DATABASE_URL)
+        except Exception:
+            pass   # fallback: criar conexão nova a cada chamada
+    return _pg_pool
+
+
 def _get_conn():
-    """Retorna conexão com PostgreSQL ou SQLite conforme o ambiente."""
+    """Retorna conexão do pool (PostgreSQL) ou nova conexão SQLite."""
     if USE_POSTGRES:
-        # Produção: PostgreSQL no Render
-        conn = psycopg2.connect(DATABASE_URL)
+        pool = _get_pool()
+        if pool:
+            return pool.getconn()
+        return psycopg2.connect(DATABASE_URL)
     else:
-        # Desenvolvimento: SQLite local
         import sqlite3
         DB_PATH = Path(__file__).parent / "empresas.db"
         conn = sqlite3.connect(DB_PATH, timeout=30)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+        return conn
+
+
+def _close_conn(conn):
+    """Devolve conexão ao pool (PostgreSQL) ou fecha (SQLite)."""
+    if USE_POSTGRES:
+        pool = _get_pool()
+        if pool:
+            try:
+                pool.putconn(conn)
+                return
+            except Exception:
+                pass
+    _close_conn(conn)
 
 def init_database():
     conn = _get_conn()
@@ -135,7 +166,7 @@ def init_database():
             except:
                 pass
     conn.commit()
-    conn.close()
+    _close_conn(conn)
 
 
 def _migrar_etapas_existentes():
@@ -179,7 +210,7 @@ def importar_empresas_bulk(registros, status_padrao="ativa"):
         ))
 
     if not validos:
-        conn.close()
+        _close_conn(conn)
         return 0, 0, 0
 
     if USE_POSTGRES:
@@ -232,7 +263,7 @@ def importar_empresas_bulk(registros, status_padrao="ativa"):
                     pass
 
     conn.commit()
-    conn.close()
+    _close_conn(conn)
     return imp, dup, err
 
 
@@ -262,7 +293,7 @@ def adicionar_empresa(nome, responsavel="", email="", telefone="",
             empresa_id = c.lastrowid
 
         conn.commit()
-        conn.close()
+        _close_conn(conn)
         adicionar_etapas_padrao(empresa_id)
         return True, "Empresa adicionada com sucesso!"
     except Exception as e:
@@ -276,7 +307,7 @@ def obter_todas_empresas():
     c = conn.cursor()
     c.execute('SELECT * FROM empresas ORDER BY nome')
     rows = c.fetchall()
-    conn.close()
+    _close_conn(conn)
     return rows
 
 
@@ -285,7 +316,7 @@ def obter_empresa_por_id(eid):
     c = conn.cursor()
     c.execute(_adapt_query('SELECT * FROM empresas WHERE id=?'), (eid,))
     row = c.fetchone()
-    conn.close()
+    _close_conn(conn)
     return row
 
 
@@ -304,7 +335,7 @@ def atualizar_empresa(eid, nome, responsavel, email, telefone,
         c.execute(query, (nome, responsavel, email, telefone, cnpj, endereco, status,
               observacoes, codigo, regime_tributario, informacoes, eid))
         conn.commit()
-        conn.close()
+        _close_conn(conn)
         return True, "Empresa atualizada com sucesso!"
     except Exception as e:
         return False, f"Erro: {e}"
@@ -317,7 +348,7 @@ def deletar_empresa(eid):
         c.execute(_adapt_query('DELETE FROM etapas_empresa WHERE empresa_id=?'), (eid,))
         c.execute(_adapt_query('DELETE FROM empresas WHERE id=?'), (eid,))
         conn.commit()
-        conn.close()
+        _close_conn(conn)
         return True, "Empresa excluída com sucesso!"
     except Exception as e:
         return False, f"Erro: {e}"
@@ -331,14 +362,14 @@ def buscar_empresas(termo):
                  WHERE nome LIKE ? OR cnpj LIKE ? OR codigo LIKE ? OR email LIKE ? OR telefone LIKE ?
                  ORDER BY nome'''), (like,)*5)
     rows = c.fetchall()
-    conn.close()
+    _close_conn(conn)
     return rows
 
 
 def obter_dataframe_empresas():
     conn = _get_conn()
     df = pd.read_sql_query('SELECT * FROM empresas ORDER BY nome', conn)
-    conn.close()
+    _close_conn(conn)
     return df
 
 
@@ -353,7 +384,7 @@ def adicionar_etapas_padrao(empresa_id):
             c.execute(_adapt_query('INSERT INTO etapas_empresa (empresa_id, nome, ordem) VALUES (?,?,?)'),
                       (empresa_id, nome, i))
     conn.commit()
-    conn.close()
+    _close_conn(conn)
 
 
 def obter_etapas_empresa(empresa_id):
@@ -361,7 +392,7 @@ def obter_etapas_empresa(empresa_id):
     c = conn.cursor()
     c.execute(_adapt_query('SELECT * FROM etapas_empresa WHERE empresa_id=? ORDER BY ordem'), (empresa_id,))
     rows = c.fetchall()
-    conn.close()
+    _close_conn(conn)
     return rows   # (id, empresa_id, nome, ordem)
 
 
@@ -373,7 +404,7 @@ def adicionar_etapa(empresa_id, nome):
     c.execute(_adapt_query('INSERT INTO etapas_empresa (empresa_id, nome, ordem) VALUES (?,?,?)'),
               (empresa_id, nome, ordem))
     conn.commit()
-    conn.close()
+    _close_conn(conn)
 
 
 def remover_etapa(etapa_id):
@@ -382,7 +413,7 @@ def remover_etapa(etapa_id):
     c.execute(_adapt_query('DELETE FROM etapas_status  WHERE etapa_id=?'), (etapa_id,))
     c.execute(_adapt_query('DELETE FROM etapas_empresa WHERE id=?'),       (etapa_id,))
     conn.commit()
-    conn.close()
+    _close_conn(conn)
 
 
 def marcar_etapa(etapa_id, mes, ano, concluido: bool):
@@ -397,7 +428,7 @@ def marcar_etapa(etapa_id, mes, ano, concluido: bool):
         c.execute('''INSERT OR REPLACE INTO etapas_status (etapa_id, mes, ano, concluido)
                      VALUES (?,?,?,?)''', (etapa_id, mes, ano, int(concluido)))
     conn.commit()
-    conn.close()
+    _close_conn(conn)
 
 
 def obter_status_etapas(empresa_id, mes, ano):
@@ -412,7 +443,7 @@ def obter_status_etapas(empresa_id, mes, ano):
         ORDER BY e.ordem
     '''), (mes, ano, empresa_id))
     rows = c.fetchall()
-    conn.close()
+    _close_conn(conn)
     return {r[0]: bool(r[1]) for r in rows}
 
 
@@ -427,7 +458,7 @@ def calcular_progresso(empresa_id, mes, ano):
         WHERE e.empresa_id=?
     '''), (mes, ano, empresa_id))
     rows = c.fetchall()
-    conn.close()
+    _close_conn(conn)
     if not rows:
         return 0, 0, 0
     total = len(rows)
@@ -457,7 +488,7 @@ def obter_estatisticas_mes(mes, ano):
         ) AS sub
     '''), (mes, ano))
     row = c.fetchone()
-    conn.close()
+    _close_conn(conn)
     return row or (0, 0, 0, 0)
 
 
@@ -486,7 +517,7 @@ def obter_empresas_com_progresso(mes, ano):
         ORDER BY e.nome
     '''), (mes, ano))
     rows = c.fetchall()
-    conn.close()
+    _close_conn(conn)
     return rows
 
 
@@ -505,7 +536,7 @@ def obter_etapas_pendentes_bulk(mes, ano):
         ORDER BY et.empresa_id, et.ordem
     '''), (mes, ano))
     rows = c.fetchall()
-    conn.close()
+    _close_conn(conn)
     result = {}
     for eid, nome in rows:
         result.setdefault(eid, []).append(nome)
@@ -535,7 +566,7 @@ def buscar_empresas_com_progresso(termo, mes, ano):
         ORDER BY e.nome
     '''), (mes, ano, like, like, like))
     rows = c.fetchall()
-    conn.close()
+    _close_conn(conn)
     return rows
 
 
@@ -544,7 +575,7 @@ def salvar_informacoes(empresa_id, texto):
     c = conn.cursor()
     c.execute(_adapt_query('UPDATE empresas SET informacoes=? WHERE id=?'), (texto, empresa_id))
     conn.commit()
-    conn.close()
+    _close_conn(conn)
 
 
 def obter_todas_etapas_status_bulk(mes, ano):
@@ -562,7 +593,7 @@ def obter_todas_etapas_status_bulk(mes, ano):
         ORDER BY et.empresa_id, et.ordem
     '''), (mes, ano))
     rows = c.fetchall()
-    conn.close()
+    _close_conn(conn)
     result = {}
     for eid, nome, done in rows:
         result.setdefault(eid, {})[nome] = bool(done)
@@ -592,7 +623,7 @@ def obter_progresso_anual_bulk(empresa_id, ano):
         ORDER BY s.mes
     '''), (ano, empresa_id))
     rows = c.fetchall()
-    conn.close()
+    _close_conn(conn)
     result = {}
     for mes, total, done in rows:
         pct = round(done / total * 100) if total > 0 else 0
@@ -611,7 +642,7 @@ def obter_nomes_etapas_distintos():
         ORDER BY cnt DESC, nome
     ''')
     rows = c.fetchall()
-    conn.close()
+    _close_conn(conn)
     return [r[0] for r in rows]
 
 
@@ -638,7 +669,7 @@ def marcar_etapa_bulk(empresa_ids, nome_etapa, mes, ano, concluido: bool):
                              VALUES (?,?,?,?)''', (row[0], mes, ano, int(concluido)))
             marcadas += 1
     conn.commit()
-    conn.close()
+    _close_conn(conn)
     return marcadas
 
 
@@ -663,5 +694,5 @@ def adicionar_etapa_bulk(empresa_ids, nome_etapa):
                   (eid, nome_etapa, ordem))
         adicionadas += 1
     conn.commit()
-    conn.close()
+    _close_conn(conn)
     return adicionadas, ja_existiam
