@@ -263,8 +263,6 @@ _MESES = MESES_PT if _is_pt else MESES_EN
 _STATUS = STATUS_PT if _is_pt else STATUS_EN
 
 # ── Navigation state ─────────────────────────────────────────
-# pagina_atual  → página de fato ativa (pode ser "⚙️ Configurações")
-# _radio_page   → qual item do radio está selecionado (nunca "⚙️ Configurações")
 _MENU_ITEMS = [
     "📋 Empresas",
     "➕ Cadastrar Empresa",
@@ -276,19 +274,40 @@ if "pagina_atual" not in st.session_state:
 if "_radio_page" not in st.session_state:
     st.session_state._radio_page = "📋 Empresas"
 
+# ── Sidebar com logo ──────────────────────────────────────────
 with st.sidebar:
+
+    # ── Logo no topo ──────────────────────────────────────────
+    import os as _os
+    _logo_path = _os.path.join(_os.path.dirname(__file__), "logo.png")
+    if _os.path.exists(_logo_path):
+        st.image(_logo_path, use_container_width=True)
+    else:
+        # Fallback enquanto a logo não foi adicionada
+        st.markdown("""
+        <div style="text-align:center;padding:20px 8px 12px;">
+          <div style="font-size:26px;font-weight:900;color:#1e3a8a;letter-spacing:-1px;line-height:1;">CONTADOR</div>
+          <div style="font-size:11px;font-weight:700;color:#f59e0b;letter-spacing:5px;margin-top:2px;">DE PADARIAS</div>
+        </div>""", unsafe_allow_html=True)
+
     st.markdown("---")
+
+    # ── Espaço para centralizar o menu ───────────────────────
+    st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
+
     _radio_sel = st.radio(
         "📋 Menu", _MENU_ITEMS,
         index=_MENU_ITEMS.index(st.session_state._radio_page),
     )
-    # Só atualiza quando o usuário realmente clicar em outro item do radio
     if _radio_sel != st.session_state._radio_page:
         st.session_state._radio_page  = _radio_sel
         st.session_state.pagina_atual = _radio_sel
         st.rerun()
 
     st.markdown("---")
+
+    # ── Filtros de mês/ano ────────────────────────────────────
+    st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
 
 today = date.today()
 mes_ref = st.sidebar.selectbox(
