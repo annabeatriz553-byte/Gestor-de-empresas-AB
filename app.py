@@ -306,37 +306,45 @@ with st.sidebar:
     if _os.path.exists(_logo_path):
         st.image(_logo_path, use_container_width=True)
     else:
-        # Logo SVG embutida (círculos + trigo + texto)
+        # Logo SVG — dois C grossos + espiga de trigo, igual ao original
         st.markdown("""
         <div style="background:white;border-radius:12px;padding:10px 8px 6px;margin:2px 0 4px;text-align:center;">
-        <svg viewBox="0 0 200 138" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:190px;display:block;margin:0 auto;">
-          <!-- Arco esquerdo — C abre para a direita -->
-          <path d="M 74,14 A 37,37 0 0 0 74,88"
-                fill="none" stroke="#0d1b6e" stroke-width="16" stroke-linecap="round"/>
-          <!-- Arco direito — C abre para a esquerda -->
-          <path d="M 126,14 A 37,37 0 0 1 126,88"
-                fill="none" stroke="#0d1b6e" stroke-width="16" stroke-linecap="round"/>
-          <!-- Haste do trigo (diagonal) -->
-          <line x1="95" y1="86" x2="116" y2="16"
-                stroke="#f5c518" stroke-width="3.5" stroke-linecap="round"/>
-          <!-- Grãos lado esquerdo -->
-          <ellipse cx="89" cy="66" rx="11" ry="4.5" fill="#f5c518" transform="rotate(18 89 66)"/>
-          <ellipse cx="93" cy="52" rx="11" ry="4.5" fill="#f5c518" transform="rotate(18 93 52)"/>
-          <ellipse cx="97" cy="38" rx="10" ry="4"   fill="#f5c518" transform="rotate(18 97 38)"/>
-          <!-- Grãos lado direito -->
-          <ellipse cx="114" cy="66" rx="11" ry="4.5" fill="#f5c518" transform="rotate(18 114 66)"/>
-          <ellipse cx="118" cy="52" rx="11" ry="4.5" fill="#f5c518" transform="rotate(18 118 52)"/>
-          <ellipse cx="122" cy="38" rx="10" ry="4"   fill="#f5c518" transform="rotate(18 122 38)"/>
-          <!-- Ponta superior -->
-          <ellipse cx="114" cy="22" rx="8" ry="3.5" fill="#f5c518" transform="rotate(18 114 22)"/>
-          <!-- Texto CONTADOR -->
-          <text x="100" y="110" text-anchor="middle"
+        <svg viewBox="0 0 210 148" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:195px;display:block;margin:0 auto;">
+
+          <!-- C esquerdo: grosso, arredondado, abre para a direita -->
+          <path d="M 75,14 A 38,38 0 0 0 75,90"
+                fill="none" stroke="#0d1b6e" stroke-width="22" stroke-linecap="round"/>
+          <!-- C direito: grosso, arredondado, abre para a esquerda -->
+          <path d="M 135,14 A 38,38 0 0 1 135,90"
+                fill="none" stroke="#0d1b6e" stroke-width="22" stroke-linecap="round"/>
+
+          <!-- Haste da espiga (diagonal, centro do vão) -->
+          <line x1="100" y1="84" x2="117" y2="17"
+                stroke="#f5c518" stroke-width="4.5" stroke-linecap="round"/>
+
+          <!-- Grãos lado ESQUERDO (apontam para cima-esquerda, rotate 135°) -->
+          <ellipse cx="85"  cy="70" rx="8"   ry="13"   fill="#f5c518" transform="rotate(135  85  70)"/>
+          <ellipse cx="88"  cy="57" rx="7"   ry="11.5" fill="#f5c518" transform="rotate(135  88  57)"/>
+          <ellipse cx="91"  cy="43" rx="6.5" ry="10"   fill="#f5c518" transform="rotate(135  91  43)"/>
+          <ellipse cx="95"  cy="30" rx="5.5" ry="8.5"  fill="#f5c518" transform="rotate(135  95  30)"/>
+
+          <!-- Grãos lado DIREITO (apontam para cima-direita, rotate -45°) -->
+          <ellipse cx="122" cy="72" rx="8"   ry="13"   fill="#f5c518" transform="rotate(-45 122  72)"/>
+          <ellipse cx="125" cy="59" rx="7"   ry="11.5" fill="#f5c518" transform="rotate(-45 125  59)"/>
+          <ellipse cx="128" cy="45" rx="6.5" ry="10"   fill="#f5c518" transform="rotate(-45 128  45)"/>
+          <ellipse cx="131" cy="32" rx="5.5" ry="8.5"  fill="#f5c518" transform="rotate(-45 131  32)"/>
+
+          <!-- Ponta do topo -->
+          <ellipse cx="117" cy="20" rx="5"   ry="8"    fill="#f5c518" transform="rotate(-45 117  20)"/>
+
+          <!-- CONTADOR -->
+          <text x="105" y="113" text-anchor="middle"
                 font-family="Arial Black,Impact,sans-serif"
-                font-size="22" font-weight="900" fill="#0d1b6e">CONTADOR</text>
-          <!-- Texto DE PADARIAS -->
-          <text x="100" y="129" text-anchor="middle"
+                font-size="23" font-weight="900" fill="#0d1b6e">CONTADOR</text>
+          <!-- DE PADARIAS -->
+          <text x="105" y="132" text-anchor="middle"
                 font-family="Arial,Helvetica,sans-serif"
-                font-size="10.5" font-weight="700" fill="#f5c518" letter-spacing="4">DE PADARIAS</text>
+                font-size="10.5" font-weight="700" fill="#f5c518" letter-spacing="3.5">DE PADARIAS</text>
         </svg>
         </div>""", unsafe_allow_html=True)
 
