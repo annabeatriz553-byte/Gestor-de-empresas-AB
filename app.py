@@ -126,6 +126,29 @@ _dark_overrides = f"""
     .stAlert {{ background-color: {_bg_card} !important; }}
     [data-testid="stSidebar"] * {{ color: {_text_main}; }}
     .stRadio label, .stCheckbox label, .stSelectbox label {{ color: {_text_main} !important; }}
+
+    /* ── Corrige inputs da sidebar em modo escuro ── */
+    [data-testid="stSidebar"] input,
+    [data-testid="stSidebar"] [data-baseweb="input"],
+    [data-testid="stSidebar"] [data-baseweb="input"] > div,
+    [data-testid="stSidebar"] [data-baseweb="input"] > div > div,
+    [data-testid="stSidebar"] [data-baseweb="select"] > div,
+    [data-testid="stSidebar"] [data-baseweb="select"] > div > div,
+    [data-testid="stSidebar"] [data-testid="stNumberInput"] input,
+    [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] > div {{
+        background-color: {_input_bg} !important;
+        color: {_text_main} !important;
+        border-color: {_border} !important;
+    }}
+    [data-testid="stSidebar"] [data-baseweb="select"] svg,
+    [data-testid="stSidebar"] [data-testid="stNumberInput"] button svg {{
+        fill: {_text_main} !important;
+        color: {_text_main} !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stNumberInput"] button {{
+        background-color: {_bg_tag} !important;
+        border-color: {_border} !important;
+    }}
 """ if _ESCURO else ""
 
 st.markdown(f"""
@@ -283,11 +306,38 @@ with st.sidebar:
     if _os.path.exists(_logo_path):
         st.image(_logo_path, use_container_width=True)
     else:
-        # Fallback enquanto a logo não foi adicionada
+        # Logo SVG embutida (círculos + trigo + texto)
         st.markdown("""
-        <div style="text-align:center;padding:20px 8px 12px;">
-          <div style="font-size:26px;font-weight:900;color:#1e3a8a;letter-spacing:-1px;line-height:1;">CONTADOR</div>
-          <div style="font-size:11px;font-weight:700;color:#f59e0b;letter-spacing:5px;margin-top:2px;">DE PADARIAS</div>
+        <div style="background:white;border-radius:12px;padding:10px 8px 6px;margin:2px 0 4px;text-align:center;">
+        <svg viewBox="0 0 200 138" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:190px;display:block;margin:0 auto;">
+          <!-- Arco esquerdo — C abre para a direita -->
+          <path d="M 74,14 A 37,37 0 0 0 74,88"
+                fill="none" stroke="#0d1b6e" stroke-width="16" stroke-linecap="round"/>
+          <!-- Arco direito — C abre para a esquerda -->
+          <path d="M 126,14 A 37,37 0 0 1 126,88"
+                fill="none" stroke="#0d1b6e" stroke-width="16" stroke-linecap="round"/>
+          <!-- Haste do trigo (diagonal) -->
+          <line x1="95" y1="86" x2="116" y2="16"
+                stroke="#f5c518" stroke-width="3.5" stroke-linecap="round"/>
+          <!-- Grãos lado esquerdo -->
+          <ellipse cx="89" cy="66" rx="11" ry="4.5" fill="#f5c518" transform="rotate(18 89 66)"/>
+          <ellipse cx="93" cy="52" rx="11" ry="4.5" fill="#f5c518" transform="rotate(18 93 52)"/>
+          <ellipse cx="97" cy="38" rx="10" ry="4"   fill="#f5c518" transform="rotate(18 97 38)"/>
+          <!-- Grãos lado direito -->
+          <ellipse cx="114" cy="66" rx="11" ry="4.5" fill="#f5c518" transform="rotate(18 114 66)"/>
+          <ellipse cx="118" cy="52" rx="11" ry="4.5" fill="#f5c518" transform="rotate(18 118 52)"/>
+          <ellipse cx="122" cy="38" rx="10" ry="4"   fill="#f5c518" transform="rotate(18 122 38)"/>
+          <!-- Ponta superior -->
+          <ellipse cx="114" cy="22" rx="8" ry="3.5" fill="#f5c518" transform="rotate(18 114 22)"/>
+          <!-- Texto CONTADOR -->
+          <text x="100" y="110" text-anchor="middle"
+                font-family="Arial Black,Impact,sans-serif"
+                font-size="22" font-weight="900" fill="#0d1b6e">CONTADOR</text>
+          <!-- Texto DE PADARIAS -->
+          <text x="100" y="129" text-anchor="middle"
+                font-family="Arial,Helvetica,sans-serif"
+                font-size="10.5" font-weight="700" fill="#f5c518" letter-spacing="4">DE PADARIAS</text>
+        </svg>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
