@@ -340,7 +340,7 @@ def adicionar_etapas_padrao(empresa_id):
 def obter_etapas_empresa(empresa_id):
     conn = _get_conn()
     c = conn.cursor()
-    c.execute('SELECT * FROM etapas_empresa WHERE empresa_id=? ORDER BY ordem', (empresa_id,))
+    c.execute(_adapt_query('SELECT * FROM etapas_empresa WHERE empresa_id=? ORDER BY ordem'), (empresa_id,))
     rows = c.fetchall()
     conn.close()
     return rows   # (id, empresa_id, nome, ordem)
@@ -420,7 +420,7 @@ def obter_estatisticas_mes(mes, ano):
     """Retorna (total, completas, em_progresso, nao_iniciadas) — UMA query."""
     conn = _get_conn()
     c = conn.cursor()
-    c.execute('''
+    c.execute(_adapt_query('''
         SELECT
             COUNT(*)                                                                    AS total,
             COALESCE(SUM(CASE WHEN total > 0 AND done = total  THEN 1 ELSE 0 END), 0) AS completas,
@@ -435,8 +435,8 @@ def obter_estatisticas_mes(mes, ano):
             LEFT JOIN etapas_status  es ON es.etapa_id   = et.id
                                        AND es.mes = ? AND es.ano = ?
             GROUP BY e.id
-        )
-    ''', (mes, ano))
+        ) AS sub
+    '''), (mes, ano))
     row = c.fetchone()
     conn.close()
     return row or (0, 0, 0, 0)
@@ -450,7 +450,7 @@ def obter_empresas_com_progresso(mes, ano):
     """
     conn = _get_conn()
     c = conn.cursor()
-    c.execute('''
+    c.execute(_adapt_query('''
         SELECT
             e.id, e.nome, e.responsavel, e.email, e.telefone,
             e.cnpj, e.endereco, e.status, e.data_cadastro,
@@ -461,9 +461,11 @@ def obter_empresas_com_progresso(mes, ano):
         LEFT JOIN etapas_empresa et ON et.empresa_id = e.id
         LEFT JOIN etapas_status  es ON es.etapa_id   = et.id
                                    AND es.mes = ? AND es.ano = ?
-        GROUP BY e.id
+        GROUP BY e.id, e.nome, e.responsavel, e.email, e.telefone,
+                 e.cnpj, e.endereco, e.status, e.data_cadastro,
+                 e.observacoes, e.codigo, e.regime_tributario, e.informacoes
         ORDER BY e.nome
-    ''', (mes, ano))
+    '''), (mes, ano))
     rows = c.fetchall()
     conn.close()
     return rows
@@ -508,7 +510,9 @@ def buscar_empresas_com_progresso(termo, mes, ano):
         LEFT JOIN etapas_status  es ON es.etapa_id   = et.id
                                    AND es.mes = ? AND es.ano = ?
         WHERE e.nome LIKE ? OR e.cnpj LIKE ? OR e.codigo LIKE ?
-        GROUP BY e.id
+        GROUP BY e.id, e.nome, e.responsavel, e.email, e.telefone,
+                 e.cnpj, e.endereco, e.status, e.data_cadastro,
+                 e.observacoes, e.codigo, e.regime_tributario, e.informacoes
         ORDER BY e.nome
     '''), (mes, ano, like, like, like))
     rows = c.fetchall()
@@ -554,18 +558,19 @@ def obter_progresso_anual_bulk(empresa_id, ano):
     c = conn.cursor()
     c.execute(_adapt_query('''
         SELECT s.mes,
-               COUNT(e.id)                                                 AS total,
+               COUNT(e.id)                                                  AS total,
                SUM(CASE WHEN COALESCE(s2.concluido,0)=1 THEN 1 ELSE 0 END) AS done
         FROM etapas_empresa e
         CROSS JOIN (
-            SELECT '01' mes UNION SELECT '02' UNION SELECT '03' UNION SELECT '04'
-            UNION SELECT '05' UNION SELECT '06' UNION SELECT '07' UNION SELECT '08'
-            UNION SELECT '09' UNION SELECT '10' UNION SELECT '11' UNION SELECT '12'
-        ) s
+            SELECT '01' AS mes UNION ALL SELECT '02' UNION ALL SELECT '03' UNION ALL SELECT '04'
+            UNION ALL SELECT '05' UNION ALL SELECT '06' UNION ALL SELECT '07' UNION ALL SELECT '08'
+            UNION ALL SELECT '09' UNION ALL SELECT '10' UNION ALL SELECT '11' UNION ALL SELECT '12'
+        ) AS s
         LEFT JOIN etapas_status s2 ON s2.etapa_id = e.id
                                   AND s2.mes = s.mes AND s2.ano = ?
         WHERE e.empresa_id = ?
         GROUP BY s.mes
+        ORDER BY s.mes
     '''), (ano, empresa_id))
     rows = c.fetchall()
     conn.close()
