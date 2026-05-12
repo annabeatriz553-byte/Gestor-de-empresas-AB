@@ -41,8 +41,10 @@ if "cfg" not in st.session_state:
     }
 cfg = st.session_state.cfg
 
-# ── Init DB ───────────────────────────────────────────────────
-init_database()
+# ── Init DB (roda só uma vez por sessão) ─────────────────────
+if "db_initialized" not in st.session_state:
+    init_database()
+    st.session_state.db_initialized = True
 
 # ── Dynamic CSS ───────────────────────────────────────────────
 _FONTES   = {"pequeno":"13px","medio":"15px","grande":"18px"}
