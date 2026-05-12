@@ -152,73 +152,84 @@ def _adapt_query(query):
 
 def importar_empresas_bulk(registros, status_padrao="ativa"):
     """
-    Importa uma lista de empresas em UMA ÚNICA transação (muito mais rápido).
-    registros: lista de dicts com keys nome, codigo, cnpj, regime_tributario,
-               responsavel, telefone, email, observacoes
+    Importa empresas em lote com o mínimo de round-trips ao banco.
     Retorna (importadas, duplicadas, erros)
     """
     conn = _get_conn()
     c = conn.cursor()
     imp = dup = err = 0
-    novos_ids = []
+
+    # Prepara lista válida
+    validos = []
+    for reg in registros:
+        nome = str(reg.get("nome", "")).strip()
+        if not nome or nome.lower() == "nan":
+            continue
+        validos.append((
+            nome,
+            str(reg.get("responsavel", "") or "").strip(),
+            str(reg.get("email",        "") or "").strip(),
+            str(reg.get("telefone",     "") or "").strip(),
+            str(reg.get("cnpj",         "") or "").strip(),
+            "",
+            status_padrao,
+            str(reg.get("observacoes",  "") or "").strip(),
+            str(reg.get("codigo",       "") or "").strip(),
+            str(reg.get("regime",       "") or "").strip(),
+        ))
+
+    if not validos:
+        conn.close()
+        return 0, 0, 0
 
     if USE_POSTGRES:
-        insert_query = '''
+        from psycopg2.extras import execute_values
+        # Uma única query para todas as empresas
+        rows = execute_values(c, '''
             INSERT INTO empresas
-            (nome, responsavel, email, telefone, cnpj, endereco,
-             status, observacoes, codigo, regime_tributario)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                (nome, responsavel, email, telefone, cnpj, endereco,
+                 status, observacoes, codigo, regime_tributario)
+            VALUES %s
+            ON CONFLICT (nome) DO NOTHING
             RETURNING id
-        '''
+        ''', validos, fetch=True)
+        novos_ids = [r[0] for r in rows]
+        imp = len(novos_ids)
+        dup = len(validos) - imp
+
+        # Uma única query para todas as etapas
+        if novos_ids:
+            etapas_rows = [
+                (eid, nome_et, ordem)
+                for eid in novos_ids
+                for ordem, nome_et in enumerate(ETAPAS_PADRAO)
+            ]
+            execute_values(c,
+                'INSERT INTO etapas_empresa (empresa_id, nome, ordem) VALUES %s ON CONFLICT DO NOTHING',
+                etapas_rows
+            )
     else:
-        insert_query = '''
-            INSERT INTO empresas
-            (nome, responsavel, email, telefone, cnpj, endereco,
-             status, observacoes, codigo, regime_tributario)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
-        '''
-
-    for reg in registros:
-        try:
-            nome = str(reg.get("nome", "")).strip()
-            if not nome or nome.lower() == "nan":
-                continue
-            c.execute(insert_query, (
-                nome,
-                str(reg.get("responsavel", "") or "").strip(),
-                str(reg.get("email",        "") or "").strip(),
-                str(reg.get("telefone",     "") or "").strip(),
-                str(reg.get("cnpj",         "") or "").strip(),
-                "",
-                status_padrao,
-                str(reg.get("observacoes",  "") or "").strip(),
-                str(reg.get("codigo",       "") or "").strip(),
-                str(reg.get("regime",       "") or "").strip(),
-            ))
-            if USE_POSTGRES:
-                novos_ids.append(c.fetchone()[0])
-            else:
-                novos_ids.append(c.lastrowid)
-            imp += 1
-        except Exception as e:
-            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
-                dup += 1
-            else:
-                err += 1
-
-    # etapas padrão para todas as novas empresas — em lote
-    if novos_ids:
-        etapas_rows = [
-            (eid, nome_et, ordem)
-            for eid in novos_ids
-            for ordem, nome_et in enumerate(ETAPAS_PADRAO)
-        ]
-        etapa_query = _adapt_query('INSERT INTO etapas_empresa (empresa_id, nome, ordem) VALUES (?,?,?)')
-        for row in etapas_rows:
+        novos_ids = []
+        for row in validos:
             try:
-                c.execute(etapa_query, row)
-            except:
-                pass
+                c.execute('''INSERT INTO empresas
+                    (nome, responsavel, email, telefone, cnpj, endereco,
+                     status, observacoes, codigo, regime_tributario)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)''', row)
+                novos_ids.append(c.lastrowid)
+                imp += 1
+            except Exception as e:
+                if "unique" in str(e).lower():
+                    dup += 1
+                else:
+                    err += 1
+        for eid in novos_ids:
+            for i, nome_et in enumerate(ETAPAS_PADRAO):
+                try:
+                    c.execute('INSERT INTO etapas_empresa (empresa_id, nome, ordem) VALUES (?,?,?)',
+                              (eid, nome_et, i))
+                except:
+                    pass
 
     conn.commit()
     conn.close()
@@ -272,7 +283,7 @@ def obter_todas_empresas():
 def obter_empresa_por_id(eid):
     conn = _get_conn()
     c = conn.cursor()
-    c.execute('SELECT * FROM empresas WHERE id=?', (eid,))
+    c.execute(_adapt_query('SELECT * FROM empresas WHERE id=?'), (eid,))
     row = c.fetchone()
     conn.close()
     return row
