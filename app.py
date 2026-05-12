@@ -855,9 +855,16 @@ elif menu == "📥 Importar Planilha":
             st.info(f"📊 **{len(df)}** linhas encontradas no arquivo")
 
             def detectar(cands, cols):
+                import unicodedata
+                def _norm(s):
+                    """Remove acentos para comparação robusta."""
+                    return ''.join(
+                        c for c in unicodedata.normalize('NFD', s)
+                        if unicodedata.category(c) != 'Mn'
+                    ).lower()
                 for cand in cands:
                     for col in cols:
-                        if cand.lower() in col.lower(): return col
+                        if _norm(cand) in _norm(col): return col
                 return "— não usar —"
 
             opcoes     = ["— não usar —"] + list(df.columns)
